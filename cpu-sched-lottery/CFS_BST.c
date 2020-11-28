@@ -31,49 +31,59 @@ struct node_t {
 };
 
 int cmp(struct node_t *a, struct node_t *b){
-    return a->task->vruntime+0.000001 <  b->task->vruntime;
+    return (int)(a->task->vruntime * 10000) <  (int)(b->task->vruntime*10000);
 }
 struct node_t* findMin(struct node_t* cur){
     struct node_t* tmp=cur;
-    while (tmp!=NULL && tmp->left!=NULL)
+    while (tmp!=NULL && tmp->left!=NULL){
+    
         tmp=tmp->left;
+    
+    }
+        
     return tmp;
 }
 
 struct node_t *insert_to_tree(struct node_t *cur, struct node_t *node){
     if (cur==NULL) return node;
+    
     if (cmp(node,cur)){
     
-        cur->left = insert_to_tree(cur->left,node);
-        cur->left->par=cur;
-        
+        cur->left = insert_to_tree(cur->left,node);        
     }else{
     
         cur->right = insert_to_tree(cur->right,node);
-        cur->right->par=cur;
-        
     }
     return cur;
 }
 struct node_t *delete_from_tree(struct node_t *cur, struct node_t *node){
     if (cur==NULL) return cur;
     if (cmp(node,cur)){
+    
         cur->left=delete_from_tree(cur->left,node);
     }else if (cmp(cur,node)){
+    
         cur->right=delete_from_tree(cur->right,node);
+    }else{
+    
+        if (cur->left==NULL){
+    
+            struct node_t *tmp=cur->right;
+            free(cur);
+            cur=NULL;
+            return tmp;
+        }else if (cur->right==NULL){
+    
+            struct node_t *tmp=cur->left;
+            free(cur);
+            cur=NULL;
+            return tmp;
+        }
+        struct node_t * tmp=findMin(cur->right);
+        cur->task=tmp->task;
+        cur->right=delete_from_tree(cur->right,tmp);
     }
-    if (cur->left==NULL){
-        struct node_t *tmp=cur->right;
-        free(cur);
-        return tmp;
-    }else if (cur->right==NULL){
-        struct node_t *tmp=cur->left;
-        free(cur);
-        return tmp;
-    }
-    struct node_t * tmp=findMin(cur->right);
-    cur->task=tmp->task;
-    cur->right=delete_from_tree(cur->right,tmp);
+    
     return cur;
 }
 
@@ -96,10 +106,12 @@ struct node_t *create_a_node(struct task_t *task){
     return tmp;
 }
 void insert_node(struct node_t *node) {
+    
     assert(node != NULL);
     head = insert_to_tree(head,node);
 }
 void delete_node(struct node_t *node){
+    
     assert(node != NULL);
     head = delete_from_tree(head,node);
 }
@@ -136,8 +148,8 @@ void generate_task(int max_size,int n){
 int main(int argc, char *argv[])
 {
     int if_debug=1;
-    if (argc != 6) {
-	fprintf(stderr, "usage: cfs <seed> <latency> <min> <num of tasks> <max size of task>\n");
+    if (argc != 7) {
+	fprintf(stderr, "usage: cfs <seed> <latency> <min> <num of tasks> <max size of task> <ifDebug[0/1]>\n");
     //seed for generate tasks
 	exit(1);
     }
@@ -146,6 +158,7 @@ int main(int argc, char *argv[])
     int min_granularity  = atoi(argv[3]);
     int n = atoi(argv[4]);
     int max_size = atoi(argv[5]);
+    if_debug=atoi(argv[6]);
     srandom(seed);
     
     // populate list with some number of jobs, each
@@ -159,25 +172,28 @@ int main(int argc, char *argv[])
     if (run_time<min_granularity) run_time=min_granularity;
     int timeStamp=0;
     while (head && n!=0){//while list is not empty
-        printf("Start");
+        //printf("Start with head %ld\n",(long)(head));
         struct node_t* cur=find_min();
         struct task_t *task=cur->task;
-        printf("found %d",task->id);
+        
+        //printf("found %d %f %d\n",task->id,task->vruntime, cur->task->id);
+        delete_node(cur);
         task->runtime+=run_time;
-        float vincreasing=((float)(prio_to_weight[0])/prio_to_weight[cur->task->prior]);
+        float vincreasing=((float)(prio_to_weight[0])/prio_to_weight[task->prior]);
         task->vruntime+=vincreasing;
-        printf("Medium");
+        
         if (if_debug)
             printf("At time %d, %d runs\n",timeStamp,task->id);
-        delete_node(cur);
-        timeStamp+=run_time;
         
+        timeStamp+=run_time;
+        if (task->id > n+10) break;
         if (task->runtime>task->tickets)//done
         {
             if (if_debug)
                 printf("id %d done, %d left\n",task->id, n-1);
-            gweight     -= prio_to_weight[task->prior];
+            gweight-= prio_to_weight[task->prior];
             free(task);
+            task=NULL;
             n--;//reduce the number of tasks
             
             if (n!=0)
@@ -185,15 +201,15 @@ int main(int argc, char *argv[])
                 run_time=sched_latency/n;
                 if (run_time<min_granularity) run_time=min_granularity;//recalculate the timeslice
             }
-            if (if_debug)
-                printf("id %d done, %d left %ld \n",task->id, n-1,(long)(head));
+            
         }else{
-            if (if_debug)
-                printf("HUH\n");
+            if (task->id<0 || task->id>100) break;
             struct node_t *node=create_a_node(task);
+            
             insert_node(node);
         }
-        printf("ABC\n");
+        
+
         
     }
     clock_t end = clock();
